@@ -59,4 +59,3 @@ jobs:
           cp android/app/build/outputs/apk/debug/app-debug.apk agenda-deportiva.apk
           TAG="beta-$(date +%Y%m%d-%H%M)"
           gh release create "$TAG" agenda-deportiva.apk --title "Agenda deportiva $TAG" --notes "APK de prueba. Descarga agenda-deportiva.apk e instálalo."
-
