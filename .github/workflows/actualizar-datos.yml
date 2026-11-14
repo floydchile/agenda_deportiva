@@ -1,0 +1,32 @@
+name: Actualizar partidos
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 10,16,22 * * *"   # 07:00, 13:00 y 19:00 en Chile (verano)
+
+permissions:
+  contents: write
+
+jobs:
+  datos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Consultar ESPN y generar events.json
+        run: |
+          pip install requests
+          python agenda_futbol.py
+
+      - name: Guardar events.json en el repositorio
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add events.json
+          git diff --cached --quiet || git commit -m "Actualizar partidos"
+          git push
