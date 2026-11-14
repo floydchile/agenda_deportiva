@@ -65,11 +65,19 @@ def normalizar(f):
 
 
 def pedir_fecha(fecha):
-    r = requests.get(f"{BASE}/fixtures", headers={"x-apisports-key": KEY}, timeout=30,
-                     params={"date": fecha.isoformat(), "timezone": TZ}).json()
-    if r.get("errors"):
-        print(f"  {fecha}: errors = {r['errors']}")
-    return r.get("response", [])
+    """Devuelve (partidos, nota). No lanza excepciones: la nota explica qué pasó."""
+    try:
+        r = requests.get(f"{BASE}/fixtures", headers={"x-apisports-key": KEY}, timeout=30,
+                         params={"date": fecha.isoformat(), "timezone": TZ})
+        try:
+            j = r.json()
+        except ValueError:
+            return [], f" (respuesta no válida, HTTP {r.status_code}: {r.text[:80]!r})"
+        if j.get("errors"):
+            return j.get("response", []), f" errors={j['errors']}"
+        return j.get("response", []), ""
+    except Exception as e:  # sin red, tiempo agotado, etc.
+        return [], f" (fallo de conexión: {type(e).__name__})"
 
 
 HTML = r"""<!DOCTYPE html>
@@ -126,7 +134,7 @@ ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10p
 </div>
 <p class="count" id="count" aria-live="polite"></p>
 <ul id="list"></ul>
-<p class="foot">Datos reales de API-Football (plan gratuito: solo ayer, hoy y mañana). Generado: __GEN__.<br>
+<p class="foot">Datos reales de API-Football (plan gratuito: solo ayer, hoy y mañana). Generado: __GEN__.<br><span id="diag">__NOTA__</span><br>
 <button id="test">Probar notificación de inicio</button></p>
 </main><div id="toast" role="status"></div>
 <script>
@@ -221,41 +229,49 @@ buildDays();buildSelects();render();arm();
 </script></body></html>"""
 
 
-def generar_html(eventos, ruta="agenda_futbol.html"):
+def generar_html(eventos, ruta="agenda_futbol.html", nota=""):
     ahora = dt.datetime.now(ZoneInfo(TZ)).strftime("%d-%m-%Y %H:%M")
     datos = json.dumps(eventos, ensure_ascii=False).replace("</", "<\\/")
     with open(ruta, "w", encoding="utf-8") as f:
-        f.write(HTML.replace("__DATA__", datos).replace("__GEN__", ahora))
+        nota = nota.replace("&", "&amp;").replace("<", "&lt;")
+        f.write(HTML.replace("__DATA__", datos).replace("__GEN__", ahora).replace("__NOTA__", nota))
 
 
 def main():
-    hoy = dt.datetime.now(ZoneInfo(TZ)).date()
-    fixtures = []
-    for i in range(2):  # hoy y mañana: 2 solicitudes
-        fecha = hoy + dt.timedelta(days=i)
-        resp = pedir_fecha(fecha)
-        print(f"{fecha}: {len(resp)} partidos en todo el mundo")
-        fixtures += resp
-        time.sleep(7)  # plan gratis: 10 solicitudes por minuto
+    notas, eventos = [], []
+    try:
+        hoy = dt.datetime.now(ZoneInfo(TZ)).date()
+        fixtures = []
+        for i in range(2):  # hoy y mañana: 2 solicitudes
+            fecha = hoy + dt.timedelta(days=i)
+            resp, nota = pedir_fecha(fecha)
+            print(f"{fecha}: {len(resp)} partidos en todo el mundo{nota}")
+            notas.append(f"{fecha}: {len(resp)} partidos{nota}")
+            fixtures += resp
+            time.sleep(7)  # plan gratis: 10 solicitudes por minuto
 
-    elegidos = {f["fixture"]["id"]: f for f in fixtures if incluir(f)}
-    eventos = sorted((normalizar(f) for f in elegidos.values()), key=lambda e: e["ts"])
+        elegidos = {f["fixture"]["id"]: f for f in fixtures if incluir(f)}
+        eventos = sorted((normalizar(f) for f in elegidos.values()), key=lambda e: e["ts"])
+        notas.append(f"incluidos: {len(eventos)}")
 
-    print(f"\nIncluidos: {len(eventos)} partidos")
-    for (lid, nombre, pais), n in sorted(
-            Counter((e["lg"]["id"], e["lg"]["n"], e["lg"]["c"]) for e in eventos).items(),
-            key=lambda x: -x[1]):
-        print(f"  {n:3d}  [{lid}] {pais} - {nombre}")
+        print(f"\nIncluidos: {len(eventos)} partidos")
+        for (lid, nombre, pais), n in sorted(
+                Counter((e["lg"]["id"], e["lg"]["n"], e["lg"]["c"]) for e in eventos).items(),
+                key=lambda x: -x[1]):
+            print(f"  {n:3d}  [{lid}] {pais} - {nombre}")
 
-    otras = Counter((f["league"]["id"], f["league"]["name"], f["league"]["country"])
-                    for f in fixtures if f["fixture"]["id"] not in elegidos)
-    print("\nLigas con más partidos que NO se incluyeron (por si falta alguna):")
-    for (lid, nombre, pais), n in otras.most_common(15):
-        print(f"  {n:3d}  [{lid}] {pais} - {nombre}")
+        otras = Counter((f["league"]["id"], f["league"]["name"], f["league"]["country"])
+                        for f in fixtures if f["fixture"]["id"] not in elegidos)
+        print("\nLigas con más partidos que NO se incluyeron (por si falta alguna):")
+        for (lid, nombre, pais), n in otras.most_common(15):
+            print(f"  {n:3d}  [{lid}] {pais} - {nombre}")
+    except Exception as e:
+        notas.append(f"error inesperado: {type(e).__name__}: {e}")
+        print(notas[-1])
 
     with open("events.json", "w", encoding="utf-8") as f:
         json.dump(eventos, f, ensure_ascii=False, indent=1)
-    generar_html(eventos)
+    generar_html(eventos, nota="Diagnóstico: " + " | ".join(notas))
     print("\nListo: events.json y agenda_futbol.html")
     try:
         from google.colab import files
