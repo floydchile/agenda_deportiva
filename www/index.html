@@ -1,15 +1,21 @@
 <!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Agenda de fútbol (datos reales)</title>
+<title>Agenda de fútbol</title>
 <style>
 :root{--bg:#EFF2F5;--card:#fff;--ink:#131B26;--mute:#5B6776;--line:#D9DFE6;--accent:#0E7C7B;--on:#fff;--live:#D64045;--soonbg:#FFF1D6;--soon:#8A5200;color-scheme:light}
 @media (prefers-color-scheme:dark){:root{--bg:#0F151C;--card:#18212B;--ink:#EAF0F6;--mute:#9AA7B6;--line:#263241;--accent:#3CC4BE;--on:#0F151C;--live:#FF6B70;--soonbg:#3A2D10;--soon:#F2B84B;color-scheme:dark}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 .app{max-width:480px;margin:0 auto;padding:calc(20px + env(safe-area-inset-top,0px)) 16px calc(40px + env(safe-area-inset-bottom,0px))}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 h1{font-size:2rem;line-height:1.05;margin:0;letter-spacing:-.02em}
-.date,.tz{margin:4px 0 0;color:var(--mute);font-size:.9rem}
+.date,.upd{margin:4px 0 0;color:var(--mute);font-size:.9rem}
+#refresh{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:.9rem;cursor:pointer}
+#refresh svg{width:18px;height:18px}
+#refresh.spin svg{animation:giro 1s linear infinite}
+@keyframes giro{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#refresh.spin svg{animation:none}}
 .days{display:flex;gap:8px;overflow-x:auto;margin:16px -16px 0;padding:2px 16px 6px}
 .day{flex:0 0 auto;min-width:56px;padding:8px 6px;border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--ink);font:inherit;text-align:center;cursor:pointer}
 .day b{display:block;font-size:1.25rem}.day span{font-size:.8rem;color:var(--mute)}
@@ -24,7 +30,6 @@ ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10p
 .ev.done{opacity:.6}
 .time{font-weight:800;font-size:1.4rem;letter-spacing:-.02em;line-height:1}
 .comp{display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--mute);margin-bottom:2px}
-.fg{width:18px;height:13px;object-fit:cover;border-radius:2px;flex:0 0 auto}
 .tm{display:flex;align-items:center;gap:8px;margin:4px 0}
 .tm .n{font-weight:600;flex:1;min-width:0}
 .tm .g{font-size:1.05rem;min-width:1ch;text-align:right}
@@ -38,12 +43,15 @@ ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10p
 .empty{padding:28px 16px;text-align:center;color:var(--mute);background:var(--card);border:1px dashed var(--line);border-radius:16px}
 .foot{margin-top:26px;font-size:.85rem;color:var(--mute)}
 .foot button{margin-top:10px;padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;cursor:pointer}
+#diag{display:none;word-break:break-word}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);max-width:92vw;padding:12px 16px;border-radius:12px;background:var(--ink);color:var(--bg);opacity:0;pointer-events:none;transition:.25s}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 </style></head><body>
 <main class="app">
-<h1>Agenda de fútbol</h1>
-<p class="date" id="date"></p><p class="tz" id="tz"></p>
+<div class="top">
+  <div><h1>Agenda de fútbol</h1><p class="date" id="date"></p><p class="upd" id="upd"></p></div>
+  <button id="refresh" aria-label="Actualizar partidos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>Actualizar</button>
+</div>
 <div class="days" id="days" role="group" aria-label="Elegir día"></div>
 <div class="filters">
 <div><label for="fs">Deporte</label><select id="fs" disabled><option>Fútbol</option></select></div>
@@ -52,34 +60,45 @@ ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10p
 </div>
 <p class="count" id="count" aria-live="polite"></p>
 <ul id="list"></ul>
-<p class="foot">Datos reales de API-Football (plan gratuito: solo ayer, hoy y mañana). Generado: 14-11-2026 13:16.<br>
+<p class="foot">Datos de ESPN, actualizados varias veces al día.<br>
+<span id="diag"></span>
 <button id="test">Probar notificación de inicio</button></p>
 </main><div id="toast" role="status"></div>
 <script>
-const E=[{"id": 1647638, "ts": 1794636000, "st": "FT", "min": 90, "h": {"n": "Bahrain", "l": "https://media.api-sports.io/football/teams/1547.png", "g": 3}, "a": {"n": "Yemen", "l": "https://media.api-sports.io/football/teams/1550.png", "g": 1}, "lg": {"id": 10, "n": "Friendlies", "c": "World", "f": null, "r": "Friendly International"}}, {"id": 1640086, "ts": 1794651300, "st": "FT", "min": 90, "h": {"n": "Japan", "l": "https://media.api-sports.io/football/teams/12.png", "g": 3}, "a": {"n": "Brazil", "l": "https://media.api-sports.io/football/teams/6.png", "g": 2}, "lg": {"id": 10, "n": "Friendlies", "c": "World", "f": null, "r": "Friendly International"}}, {"id": 1647360, "ts": 1794657600, "st": "FT", "min": 90, "h": {"n": "Chinese Taipei", "l": "https://media.api-sports.io/football/teams/1557.png", "g": 0}, "a": {"n": "Kyrgyzstan", "l": "https://media.api-sports.io/football/teams/1554.png", "g": 3}, "lg": {"id": 10, "n": "Friendlies", "c": "World", "f": null, "r": "Friendly International"}}, {"id": 1647365, "ts": 1794657600, "st": "FT", "min": 90, "h": {"n": "China", "l": "https://media.api-sports.io/football/teams/1566.png", "g": 2}, "a": {"n": "Malaysia", "l": "https://media.api-sports.io/football/teams/1538.png", "g": 0}, "lg": {"id": 10, "n": "Friendlies", "c": "World", "f": null, "r": "Friendly International"}}, {"id": 1528971, "ts": 1794664800, "st": "FT", "min": 90, "h": {"n": "Kosovo", "l": "https://media.api-sports.io/football/teams/1111.png", "g": 0}, "a": {"n": "Israel", "l": "https://media.api-sports.io/football/teams/1116.png", "g": 0}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League B - 5"}}, {"id": 1648285, "ts": 1794668400, "st": "2H", "min": 50, "h": {"n": "Palestine", "l": "https://media.api-sports.io/football/teams/1562.png", "g": 0}, "a": {"n": "Iran", "l": "https://media.api-sports.io/football/teams/22.png", "g": 0}, "lg": {"id": 10, "n": "Friendlies", "c": "World", "f": null, "r": "Friendly International"}}, {"id": 1545884, "ts": 1794672000, "st": "1H", "min": 12, "h": {"n": "Uganda", "l": "https://media.api-sports.io/football/teams/1519.png", "g": 1}, "a": {"n": "Botswana", "l": "https://media.api-sports.io/football/teams/1520.png", "g": 0}, "lg": {"id": 36, "n": "Africa Cup of Nations - Qualification", "c": "World", "f": null, "r": "Group Stage - 3"}}, {"id": 1528972, "ts": 1794675600, "st": "NS", "min": null, "h": {"n": "Norway", "l": "https://media.api-sports.io/football/teams/1090.png", "g": null}, "a": {"n": "Wales", "l": "https://media.api-sports.io/football/teams/767.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League A - 5"}}, {"id": 1528973, "ts": 1794675600, "st": "NS", "min": null, "h": {"n": "Georgia", "l": "https://media.api-sports.io/football/teams/1104.png", "g": null}, "a": {"n": "Hungary", "l": "https://media.api-sports.io/football/teams/769.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League B - 5"}}, {"id": 1545862, "ts": 1794682800, "st": "NS", "min": null, "h": {"n": "Algeria", "l": "https://media.api-sports.io/football/teams/1532.png", "g": null}, "a": {"n": "Togo", "l": "https://media.api-sports.io/football/teams/1534.png", "g": null}, "lg": {"id": 36, "n": "Africa Cup of Nations - Qualification", "c": "World", "f": null, "r": "Group Stage - 3"}}, {"id": 1545863, "ts": 1794682800, "st": "NS", "min": null, "h": {"n": "Angola", "l": "https://media.api-sports.io/football/teams/1529.png", "g": null}, "a": {"n": "South Sudan", "l": "https://media.api-sports.io/football/teams/1496.png", "g": null}, "lg": {"id": 36, "n": "Africa Cup of Nations - Qualification", "c": "World", "f": null, "r": "Group Stage - 3"}}, {"id": 1640019, "ts": 1794682800, "st": "NS", "min": null, "h": {"n": "Sint Maarten", "l": "https://media.api-sports.io/football/teams/10985.png", "g": null}, "a": {"n": "French Guyana", "l": "https://media.api-sports.io/football/teams/8118.png", "g": null}, "lg": {"id": 536, "n": "CONCACAF Nations League", "c": "World", "f": null, "r": "League B - 4"}}, {"id": 1647641, "ts": 1794682800, "st": "NS", "min": null, "h": {"n": "Basque Country", "l": "https://media.api-sports.io/football/teams/23263.png", "g": null}, "a": {"n": "Venezuela", "l": "https://media.api-sports.io/football/teams/2379.png", "g": null}, "lg": {"id": 10, "n": "Friendlies", "c": "World", "f": null, "r": "Friendly International"}}, {"id": 1528974, "ts": 1794685500, "st": "NS", "min": null, "h": {"n": "Portugal", "l": "https://media.api-sports.io/football/teams/27.png", "g": null}, "a": {"n": "Denmark", "l": "https://media.api-sports.io/football/teams/21.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League A - 5"}}, {"id": 1528975, "ts": 1794685500, "st": "NS", "min": null, "h": {"n": "Northern Ireland", "l": "https://media.api-sports.io/football/teams/771.png", "g": null}, "a": {"n": "Ukraine", "l": "https://media.api-sports.io/football/teams/772.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League B - 5"}}, {"id": 1528976, "ts": 1794685500, "st": "NS", "min": null, "h": {"n": "Austria", "l": "https://media.api-sports.io/football/teams/775.png", "g": null}, "a": {"n": "Rep. Of Ireland", "l": "https://media.api-sports.io/football/teams/776.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League B - 5"}}, {"id": 1528977, "ts": 1794685500, "st": "NS", "min": null, "h": {"n": "Romania", "l": "https://media.api-sports.io/football/teams/774.png", "g": null}, "a": {"n": "Poland", "l": "https://media.api-sports.io/football/teams/24.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League B - 5"}}, {"id": 1528978, "ts": 1794685500, "st": "NS", "min": null, "h": {"n": "Sweden", "l": "https://media.api-sports.io/football/teams/5.png", "g": null}, "a": {"n": "Bosnia & Herzegovina", "l": "https://media.api-sports.io/football/teams/1113.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League B - 5"}}, {"id": 1492455, "ts": 1794691800, "st": "NS", "min": null, "h": {"n": "Mirassol", "l": "https://media.api-sports.io/football/teams/7848.png", "g": null}, "a": {"n": "Atletico-MG", "l": "https://media.api-sports.io/football/teams/1062.png", "g": null}, "lg": {"id": 71, "n": "Serie A", "c": "Brazil", "f": "https://media.api-sports.io/flags/br.svg", "r": "Regular Season - 35"}}, {"id": 1644693, "ts": 1794691800, "st": "NS", "min": null, "h": {"n": "Haiti", "l": "https://media.api-sports.io/football/teams/2386.png", "g": null}, "a": {"n": "USA", "l": "https://media.api-sports.io/football/teams/2384.png", "g": null}, "lg": {"id": 536, "n": "CONCACAF Nations League", "c": "World", "f": null, "r": "Quarter-finals"}}, {"id": 1492312, "ts": 1794699000, "st": "NS", "min": null, "h": {"n": "Chapecoense-sc", "l": "https://media.api-sports.io/football/teams/132.png", "g": null}, "a": {"n": "Vasco DA Gama", "l": "https://media.api-sports.io/football/teams/133.png", "g": null}, "lg": {"id": 71, "n": "Serie A", "c": "Brazil", "f": "https://media.api-sports.io/flags/br.svg", "r": "Regular Season - 21"}}, {"id": 1640018, "ts": 1794700800, "st": "NS", "min": null, "h": {"n": "St. Vincent / Grenadines", "l": "https://media.api-sports.io/football/teams/5541.png", "g": null}, "a": {"n": "Belize", "l": "https://media.api-sports.io/football/teams/5528.png", "g": null}, "lg": {"id": 536, "n": "CONCACAF Nations League", "c": "World", "f": null, "r": "League B - 4"}}, {"id": 1644691, "ts": 1794704400, "st": "NS", "min": null, "h": {"n": "Jamaica", "l": "https://media.api-sports.io/football/teams/2385.png", "g": null}, "a": {"n": "Mexico", "l": "https://media.api-sports.io/football/teams/16.png", "g": null}, "lg": {"id": 536, "n": "CONCACAF Nations League", "c": "World", "f": null, "r": "Quarter-finals"}}, {"id": 1586133, "ts": 1794711600, "st": "NS", "min": null, "h": {"n": "New Zealand", "l": "https://media.api-sports.io/football/teams/4673.png", "g": null}, "a": {"n": "India", "l": "https://media.api-sports.io/football/teams/1537.png", "g": null}, "lg": {"id": 10, "n": "Friendlies", "c": "World", "f": null, "r": "Friendly International"}}, {"id": 1647366, "ts": 1794744000, "st": "NS", "min": null, "h": {"n": "Kyrgyzstan", "l": "https://media.api-sports.io/football/teams/1554.png", "g": null}, "a": {"n": "Vietnam", "l": "https://media.api-sports.io/football/teams/1542.png", "g": null}, "lg": {"id": 10, "n": "Friendlies", "c": "World", "f": null, "r": "Friendly International"}}, {"id": 1528979, "ts": 1794751200, "st": "NS", "min": null, "h": {"n": "Cyprus", "l": "https://media.api-sports.io/football/teams/1106.png", "g": null}, "a": {"n": "Montenegro", "l": "https://media.api-sports.io/football/teams/1109.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League C - 6"}}, {"id": 1545616, "ts": 1794751200, "st": "NS", "min": null, "h": {"n": "Latvia", "l": "https://media.api-sports.io/football/teams/1092.png", "g": null}, "a": {"n": "Armenia", "l": "https://media.api-sports.io/football/teams/1094.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League C - 6"}}, {"id": 1528980, "ts": 1794762000, "st": "NS", "min": null, "h": {"n": "Belarus", "l": "https://media.api-sports.io/football/teams/1100.png", "g": null}, "a": {"n": "Albania", "l": "https://media.api-sports.io/football/teams/778.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League C - 6"}}, {"id": 1528981, "ts": 1794762000, "st": "NS", "min": null, "h": {"n": "Finland", "l": "https://media.api-sports.io/football/teams/1099.png", "g": null}, "a": {"n": "San Marino", "l": "https://media.api-sports.io/football/teams/1115.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League C - 6"}}, {"id": 1528982, "ts": 1794771900, "st": "NS", "min": null, "h": {"n": "France", "l": "https://media.api-sports.io/football/teams/2.png", "g": null}, "a": {"n": "Türkiye", "l": "https://media.api-sports.io/football/teams/777.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League A - 6"}}, {"id": 1528983, "ts": 1794771900, "st": "NS", "min": null, "h": {"n": "Belgium", "l": "https://media.api-sports.io/football/teams/1.png", "g": null}, "a": {"n": "Italy", "l": "https://media.api-sports.io/football/teams/768.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League A - 6"}}, {"id": 1528984, "ts": 1794771900, "st": "NS", "min": null, "h": {"n": "Spain", "l": "https://media.api-sports.io/football/teams/9.png", "g": null}, "a": {"n": "England", "l": "https://media.api-sports.io/football/teams/10.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League A - 6"}}, {"id": 1528985, "ts": 1794771900, "st": "NS", "min": null, "h": {"n": "Croatia", "l": "https://media.api-sports.io/football/teams/3.png", "g": null}, "a": {"n": "Czech Republic", "l": "https://media.api-sports.io/football/teams/770.png", "g": null}, "lg": {"id": 5, "n": "UEFA Nations League", "c": "World", "f": null, "r": "League A - 6"}}, {"id": 1644696, "ts": 1794783600, "st": "NS", "min": null, "h": {"n": "Panama", "l": "https://media.api-sports.io/football/teams/11.png", "g": null}, "a": {"n": "Curaçao", "l": "https://media.api-sports.io/football/teams/5530.png", "g": null}, "lg": {"id": 536, "n": "CONCACAF Nations League", "c": "World", "f": null, "r": "Quarter-finals"}}];
+const REMOTE="https://raw.githubusercontent.com/floydchile/agenda_deportiva/main/events.json";
+const LOCAL="events.json";
 const $=q=>document.querySelector(q);
-const now=Date.now();
 const tf=new Intl.DateTimeFormat(undefined,{hour:"2-digit",minute:"2-digit"});
 const key=ms=>new Date(ms).toLocaleDateString("en-CA");
-const ES={"World":"Selecciones","England":"Inglaterra","Spain":"España","Italy":"Italia","Germany":"Alemania","France":"Francia","Netherlands":"Países Bajos","Brazil":"Brasil","USA":"EE.UU.","Switzerland":"Suiza","Belgium":"Bélgica","Peru":"Perú","Mexico":"México","Japan":"Japón"};
-const cn=c=>ES[c]||c;
 const esc=s=>String(s).replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
-const ev=E.map(e=>({...e,s:e.ts*1000})).sort((a,b)=>a.s-b.s);
-const dias=[...new Set(ev.map(e=>key(e.s)))].sort();
-const st={d:Math.max(0,dias.indexOf(key(now))),r:"",c:""};
+let ev=[],dias=[],st={k:null,r:"",c:""},diag="";
 let favs=new Set();
 try{favs=new Set(JSON.parse(localStorage.getItem("favs")||"[]"))}catch(e){}
 const save=()=>{try{localStorage.setItem("favs",JSON.stringify([...favs]))}catch(e){}};
-$("#date").textContent=new Date().toLocaleDateString("es",{weekday:"long",day:"numeric",month:"long"});
-$("#tz").textContent="Horarios en tu zona: "+Intl.DateTimeFormat().resolvedOptions().timeZone;
+$("#date").textContent=new Date().toLocaleDateString("es",{weekday:"long",day:"numeric",month:"long"})+" · "+Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+function aplicar(datos){
+  const lista=Array.isArray(datos)?datos:(datos.events||[]);
+  diag=datos.diag||"";
+  ev=lista.map(e=>({...e,s:e.ts*1000})).sort((a,b)=>a.s-b.s);
+  const hoy=key(Date.now()),man=key(Date.now()+864e5);
+  dias=[...new Set([hoy,man,...ev.map(e=>key(e.s))])].sort();
+  if(!dias.includes(st.k))st.k=dias.includes(hoy)?hoy:dias[0];
+  const paises=new Set(ev.map(e=>e.lg.c));
+  if(st.r&&!paises.has(st.r)){st.r="";st.c=""}
+  buildDays();buildSelects();render();arm();
+  const d=$("#diag");d.textContent=ev.length?"":("Sin partidos. Detalle: "+diag);d.style.display=ev.length?"none":"block";
+}
 function buildDays(){
-  $("#days").innerHTML=dias.map((k,i)=>{const d=new Date(k+"T12:00:00");
-    return `<button class="day" data-i="${i}" aria-pressed="${i===st.d}"><span>${k===key(now)?"Hoy":d.toLocaleDateString("es",{weekday:"short"}).replace(".","")}</span><b>${d.getDate()}</b></button>`}).join("");
+  const hoy=key(Date.now());
+  $("#days").innerHTML=dias.map(k=>{const d=new Date(k+"T12:00:00");
+    return `<button class="day" data-k="${k}" aria-pressed="${k===st.k}"><span>${k===hoy?"Hoy":d.toLocaleDateString("es",{weekday:"short"}).replace(".","")}</span><b>${d.getDate()}</b></button>`}).join("");
 }
 const uniq=a=>[...new Set(a)];
 function opts(sel,list,label,val){sel.innerHTML=`<option value="">${label}</option>`+list.map(([v,t])=>`<option value="${esc(v)}">${esc(t)}</option>`).join("");sel.value=val}
 function buildSelects(){
-  opts($("#fr"),uniq(ev.map(e=>e.lg.c)).sort((a,b)=>cn(a).localeCompare(cn(b))).map(c=>[c,cn(c)]),"Todos",st.r);
+  const orden=(a,b)=>a==="Selecciones"?-1:b==="Selecciones"?1:a.localeCompare(b,"es");
+  opts($("#fr"),uniq(ev.map(e=>e.lg.c)).sort(orden).map(c=>[c,c]),"Todos",st.r);
   const byR=ev.filter(e=>!st.r||e.lg.c===st.r);
   opts($("#fc"),uniq(byR.map(e=>e.lg.n)).sort().map(n=>[n,n]),"Todas",st.c);
 }
@@ -88,23 +107,23 @@ function status(e){
   if(LIVE.includes(e.st))return{chip:`<span class="chip live">En vivo${e.min?" "+e.min+"′":""}</span>`};
   if(DONE.includes(e.st))return{cls:"done",chip:'<span class="chip">Finalizado</span>'};
   if(["PST","CANC","ABD","SUSP"].includes(e.st))return{cls:"done",chip:`<span class="chip">${({PST:"Aplazado",CANC:"Cancelado"})[e.st]||"Suspendido"}</span>`};
-  const m=Math.round((e.s-now)/6e4);
+  const m=Math.round((e.s-Date.now())/6e4);
   return m>0&&m<=60?{chip:`<span class="chip soon">Empieza en ${m} min</span>`}:{};
 }
-const team=t=>`<div class="tm"><img class="cr" src="${esc(t.l)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><span class="n">${esc(t.n)}</span>${t.g===null?"":`<b class="g">${t.g}</b>`}</div>`;
+const team=t=>`<div class="tm"><img class="cr" src="${esc(t.l)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><span class="n">${esc(t.n)}</span>${t.g===null||t.g===undefined?"":`<b class="g">${t.g}</b>`}</div>`;
 const bell='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
 function render(){
-  const k=dias[st.d];
-  const list=ev.filter(e=>key(e.s)===k&&(!st.r||e.lg.c===st.r)&&(!st.c||e.lg.n===st.c));
+  const list=ev.filter(e=>key(e.s)===st.k&&(!st.r||e.lg.c===st.r)&&(!st.c||e.lg.n===st.c));
   $("#count").textContent=list.length?`${list.length} ${list.length===1?"partido":"partidos"}`:"";
   $("#list").innerHTML=list.length?list.map(e=>{
     const s=status(e),on=favs.has(e.id);
-    const flag=e.lg.f?`<img class="fg" src="${esc(e.lg.f)}" alt="" onerror="this.style.display='none'">`:"🌍";
-    return`<li class="ev ${s.cls||""}"><div class="time">${tf.format(e.s)}</div><div><div class="comp">${flag}<span>${esc(cn(e.lg.c))} · ${esc(e.lg.n)}</span></div>${team(e.h)}${team(e.a)}${s.chip||""}</div><button class="bell" data-id="${e.id}" aria-pressed="${on}" aria-label="Avisarme al comenzar: ${esc(e.h.n)} vs ${esc(e.a.n)}">${bell}</button></li>`}).join(""):'<li class="empty">No hay partidos con estos filtros. Prueba otro día o elige “Todos”.</li>';
+    const f=e.lg.f&&String(e.lg.f).startsWith("http")?`<img class="cr" style="width:18px;height:13px" src="${esc(e.lg.f)}" alt="">`:`<span aria-hidden="true">${e.lg.f||"🌍"}</span>`;
+    return`<li class="ev ${s.cls||""}"><div class="time">${tf.format(e.s)}</div><div><div class="comp">${f}<span>${esc(e.lg.c)} · ${esc(e.lg.n)}</span></div>${team(e.h)}${team(e.a)}${s.chip||""}</div><button class="bell" data-id="${e.id}" aria-pressed="${on}" aria-label="Avisarme al comenzar: ${esc(e.h.n)} vs ${esc(e.a.n)}">${bell}</button></li>`}).join(""):'<li class="empty">No hay partidos con estos filtros. Prueba otro día o elige “Todos”.</li>';
 }
 let tt;
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(tt);tt=setTimeout(()=>t.classList.remove("on"),3200)}
 function notify(a,b){toast(a+": "+b);try{if("Notification" in window&&Notification.permission==="granted")new Notification(a,{body:b})}catch(e){}}
+
 const LN=(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())?window.Capacitor.Plugins.LocalNotifications:null;
 async function programar(id,titulo,cuerpo,cuando){
   try{
@@ -118,9 +137,32 @@ const timers={};
 function arm(){
   if(LN)return;
   Object.values(timers).forEach(clearTimeout);
-  favs.forEach(id=>{const e=ev.find(x=>x.id==id),w=e&&e.s-Date.now();if(w>0&&w<2e9)timers[id]=setTimeout(()=>notify("Comienza ahora",e.h.n+" vs "+e.a.n),w)});
+  favs.forEach(id=>{const e=ev.find(x=>x.id===id),w=e&&e.s-Date.now();if(w>0&&w<2e9)timers[id]=setTimeout(()=>notify("Comienza ahora",e.h.n+" vs "+e.a.n),w)});
 }
-$("#days").onclick=e=>{const b=e.target.closest(".day");if(!b)return;st.d=+b.dataset.i;buildDays();render()};
+
+async function traer(url){const r=await fetch(url,{cache:"no-store"});if(!r.ok)throw new Error(r.status);return r.json()}
+function leerCache(){try{return JSON.parse(localStorage.getItem("cache"))}catch(e){return null}}
+function guardarCache(j){try{localStorage.setItem("cache",JSON.stringify(j))}catch(e){}}
+function actualizadoEl(j,aviso){
+  const g=j&&j.generated?new Date(j.generated):null;
+  $("#upd").textContent=(aviso?aviso+" · ":"")+(g?"Datos de "+g.toLocaleString("es",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"");
+}
+async function cargar(manual){
+  const b=$("#refresh");b.classList.add("spin");
+  try{
+    const j=await traer(REMOTE+"?t="+Date.now());
+    aplicar(j);guardarCache(j);actualizadoEl(j,"");
+    if(manual)toast("Partidos actualizados");
+  }catch(e){
+    let j=leerCache(),aviso="Sin conexión: últimos datos guardados";
+    if(!j){try{j=await traer(LOCAL);aviso="Sin conexión: datos incluidos en la app"}catch(e2){j=null}}
+    if(j){aplicar(j);actualizadoEl(j,aviso)}else{aplicar({events:[],diag:"no se pudo descargar nada"});$("#upd").textContent="No se pudieron cargar los partidos"}
+    if(manual)toast("No se pudo actualizar");
+  }
+  b.classList.remove("spin");
+}
+$("#refresh").onclick=()=>cargar(true);
+$("#days").onclick=e=>{const b=e.target.closest(".day");if(!b)return;st.k=b.dataset.k;buildDays();render()};
 $("#fr").onchange=e=>{st.r=e.target.value;st.c="";buildSelects();render()};
 $("#fc").onchange=e=>{st.c=e.target.value;render()};
 $("#list").onclick=async e=>{
@@ -143,5 +185,5 @@ $("#test").onclick=async()=>{
   try{if("Notification" in window&&Notification.permission==="default")Notification.requestPermission()}catch(e){}
   notify("Comienza ahora","Chile vs Perú");
 };
-buildDays();buildSelects();render();arm();
+cargar(false);
 </script></body></html>
