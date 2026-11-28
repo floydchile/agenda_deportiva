@@ -1,5 +1,5 @@
 {
- "generated": "2026-11-28T03:48:43+00:00",
+ "generated": "2026-11-28T18:03:47+00:00",
  "diag": "eng.1:0 (error: HTTPError) | esp.1:0 (error: HTTPError) | ita.1:0 (error: HTTPError) | ger.1:0 (error: HTTPError) | fra.1:0 (error: HTTPError) | ned.1:0 (error: HTTPError) | por.1:0 (error: HTTPError) | bra.1:0 (error: HTTPError) | arg.1:0 (error: HTTPError) | usa.1:0 (error: HTTPError) | chi.1:0 (error: HTTPError) | chi.2:0 (error: HTTPError) | fifa.friendly:0 (error: HTTPError) | uefa.nations:0 (error: HTTPError) | all(selecciones):0/0 (error: HTTPError)",
  "events": []
 }
